@@ -47,6 +47,7 @@ using Imcodec.MessageLayer.Generated;
 using Imcodec.ObjectProperty;
 using Imcodec.ObjectProperty.TypeCache;
 using Imlight.Common;
+using Imlight.CoreLib.Game.States;
 using Imlight.CoreLib.Game.Requirements;
 using Imlight.CoreLib.Game.Requirements.Contexts;
 using Imlight.CoreLib.Game.Zone.Core;
@@ -60,6 +61,8 @@ internal sealed class RenderComponent(ZoneEntity entity) : ZoneEntityComponent(e
 
     private const string SPAWN_STATE_NAME = "On";
     private const string DESPAWN_STATE_NAME = "Off";
+    private const string OPEN_STATE_NAME = "IdleOpen";
+    private const string WIZARD_CITY_ZONE_PREFIX = "WizardCity";
 
     private readonly CoreObjectSerializer _serializer = new(
         versionable: false,
@@ -71,6 +74,9 @@ internal sealed class RenderComponent(ZoneEntity entity) : ZoneEntityComponent(e
     private readonly Dictionary<CoreObject, IActorRef> _playersInRange = [];
     private readonly Dictionary<Wizard, IActorRef> _playersWithRequirementsMet = [];
     private readonly Dictionary<IActorRef, Wizard> _playerIgnoreBecauseDynamod = [];
+    private static readonly bool s_wizardCityDoorsAlwaysOpen
+        = ConfigurationManager.Settings["Advanced.WizardCityDoorsAlwaysOpen"].AsBool();
+
     private float _renderDistance;
     private bool _doesDistanceCheck = false;
 
@@ -147,6 +153,9 @@ internal sealed class RenderComponent(ZoneEntity entity) : ZoneEntityComponent(e
             if (persistedState is not null) {
                 Entity.ChangeStateExclusiveSender(persistedState, suspect);
             }
+            else if (ShouldOpenDoorOnJoin()) {
+                Entity.ChangeStateExclusiveSender(OPEN_STATE_NAME, suspect);
+            }
 
             // Always add the player to the in-range list so the next
             // OnPlayerMove tick can correctly evaluate distance and send
@@ -170,6 +179,27 @@ internal sealed class RenderComponent(ZoneEntity entity) : ZoneEntityComponent(e
             _playersInRange.Remove(player);
             _playersInRange.Add(player, suspect);
         }
+    }
+
+    private bool ShouldOpenDoorOnJoin() {
+        if (!s_wizardCityDoorsAlwaysOpen) {
+            return false;
+        }
+
+        if (Entity.Zone?.ZoneData?.m_zoneName?.StartsWith(WIZARD_CITY_ZONE_PREFIX,
+                System.StringComparison.OrdinalIgnoreCase) != true) {
+            return false;
+        }
+
+        // A door is any object whose state set offers an open state. The client keeps the
+        // gate shut otherwise, and a shut gate blocks the volume its teleport trigger needs.
+        var stateSetName = Entity.Template?.m_behaviors?
+            .OfType<ObjectStateBehaviorTemplate>()
+            .FirstOrDefault()?.m_stateSetName;
+
+        return stateSetName is not null
+            && StateFactory.GetStateSet(stateSetName)?.m_categories?
+                .Any(category => category.m_states?.Any(state => state.m_stateName == OPEN_STATE_NAME) == true) == true;
     }
 
     public override void OnPlayerLeave(IActorRef suspect, ulong id) {

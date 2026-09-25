@@ -38,7 +38,7 @@
  * 
  * Created by: Jooty
  * Version: KALI 1.0
- * Last Updated: 08/21/2026
+ * Last Updated: 09/24/2026
  */
 
 using System;
@@ -46,6 +46,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Akka.Actor;
 using Imcodec.ObjectProperty.TypeCache;
+using Imlight.Common;
 using Imlight.CoreLib.Game.Requirements;
 using Imlight.CoreLib.Game.Requirements.Contexts;
 using Imlight.CoreLib.Game.Results;
@@ -63,6 +64,11 @@ namespace Imlight.CoreLib.Game.Zone.Core;
 /// <param name="zone">The zone that this trigger is a part of.</param>
 public sealed class ZoneTrigger(IActorRef zoneRef, Zone zone, Trigger trigger) 
     : ZoneEntity(null, null, null, zoneRef, zone) {
+
+    private const string WizardCityZonePrefix = "WizardCity";
+
+    private static readonly bool s_wizardCityDoorsAlwaysOpen
+        = ConfigurationManager.Settings["Advanced.WizardCityDoorsAlwaysOpen"].AsBool();
 
     public Trigger TriggerData { get; init; } = trigger;
     private readonly Dictionary<IActorRef, DateTime> _cooldowns = [];
@@ -84,10 +90,16 @@ public sealed class ZoneTrigger(IActorRef zoneRef, Zone zone, Trigger trigger)
             return;
         }
 
+        // temporary: tracing gate teleports. remove me.
+        Logger.Debug("TRIGFIRE {0} | event={1} | zone={2} | bypass={3}",
+            Logger.Args(TriggerData.m_triggerName, message.EventName,
+                        Zone?.ZoneData?.m_zoneName, IsAlwaysOpenDoor(TriggerData, Zone)));
+
         // Evaluate requirements when present.
         if (   TriggerData.m_requirements is not null
             && TriggerData.m_requirements.m_requirements is not null
-            && TriggerData.m_requirements.m_requirements.Count > 0) {
+            && TriggerData.m_requirements.m_requirements.Count > 0
+            && !IsAlwaysOpenDoor(TriggerData, Zone)) {
             var queryWizardMsg = new CHARACTER_103_PROTOCOL.MSG_QUERYACTIVEWIZARD();
             var wizardResponse = message.PlayerActor.Ask<CHARACTER_103_PROTOCOL.MSG_CHARACTER>(queryWizardMsg).Result;
 
@@ -119,6 +131,24 @@ public sealed class ZoneTrigger(IActorRef zoneRef, Zone zone, Trigger trigger)
 
         ResultDispatcher.ExecuteResults(Context, results, message.PlayerActor, message.PlayerGameObject,
                                        Sender, ZoneRef, triggerName: TriggerData.m_triggerName);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="trigger"/> is a door that opens regardless of its
+    /// requirements, per the WizardCityDoorsAlwaysOpen setting.
+    /// </summary>
+    internal static bool IsAlwaysOpenDoor(Trigger trigger, Zone zone) {
+        if (!s_wizardCityDoorsAlwaysOpen) {
+            return false;
+        }
+
+        // Scoped to teleport triggers so quest and cinematic triggers still gate normally.
+        // The street gates read as closed because their teleport requires a quest registry
+        // entry, not because of the gate object's own state.
+        var isTeleporter = trigger?.m_results?.m_results?.Any(result => result is ResTeleport) == true;
+
+        return isTeleporter
+            && zone?.ZoneData?.m_zoneName?.StartsWith(WizardCityZonePrefix, StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private bool CooldownCheck(IActorRef playerRef) {

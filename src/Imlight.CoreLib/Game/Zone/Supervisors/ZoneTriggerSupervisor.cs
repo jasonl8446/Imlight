@@ -101,6 +101,12 @@ internal sealed class ZoneTriggerSupervisor(Core.Zone zone) : ZoneEntitySupervis
             return true;
         }
 
+        // This runs before the trigger actor sees the event, so the door exemption has to
+        // be honoured here too or the event never reaches it.
+        if (ZoneTrigger.IsAlwaysOpenDoor(trigger, Zone)) {
+            return true;
+        }
+
         var queryWizardMsg = new CHARACTER_103_PROTOCOL.MSG_QUERYACTIVEWIZARD();
         var wizardResponse = message.PlayerActor.Ask<CHARACTER_103_PROTOCOL.MSG_CHARACTER>(queryWizardMsg).Result;
 

@@ -48,13 +48,15 @@ internal class CommandDynaMod : CommandProtocol {
     [Command("set")]
     [AuthRequired(AuthLevel.QualityAssurance)]
     private void SetDynaModCommand(string state, [Remainder] string clientTag) {
+        // On and Off spawn and despawn the object. Any other value is a state from the
+        // object's state set, such as IdleOpen on a gate, and is replayed on zone join.
         var normalizedState = state.ToLowerInvariant() switch {
             "on" => "On",
             "off" => "Off",
-            _ => null
+            _ => state
         };
-        if (normalizedState is null) {
-            InformSenderClient("Invalid state. Use 'on' or 'off'.");
+        if (string.IsNullOrWhiteSpace(normalizedState)) {
+            InformSenderClient("Provide a state: 'on', 'off', or a state name such as 'IdleOpen'.");
 
             return;
         }

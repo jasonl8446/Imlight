@@ -81,4 +81,26 @@ internal class CommandDebugProtocol : CommandProtocol {
         Context.ZoneActor.Tell(message, Context.SessionActor);
     }
 
+    [Command("setstate")]
+    [AuthRequired(AuthLevel.QualityAssurance)]
+    private void SetObjectStateCommand(string stateName, [Remainder] string zoneTag) {
+        // On and Off are the spawn states. Objects with a state set accept their own
+        // names instead, such as IdleOpen on a gate.
+        var stateChangeMsg = new ZONE_102_PROTOCOL.MSG_ENTERSTATE {
+            ObjectName = zoneTag,
+            StateName = stateName,
+            ExclusiveToSender = true,
+            Sender = Context.SessionActor
+        };
+
+        var message = new ZONE_102_PROTOCOL.MSG_ZONEBROADCAST {
+            Messages = [stateChangeMsg],
+            Sender = Context.SessionActor,
+            Targets = ZoneBroadcastTarget.Objects,
+        };
+
+        Context.ZoneActor.Tell(message, Context.SessionActor);
+        InformSenderClient($"Sent state '{stateName}' to '{zoneTag}'.");
+    }
+
 }
