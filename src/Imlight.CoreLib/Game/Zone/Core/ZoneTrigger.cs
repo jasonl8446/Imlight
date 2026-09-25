@@ -90,10 +90,6 @@ public sealed class ZoneTrigger(IActorRef zoneRef, Zone zone, Trigger trigger)
             return;
         }
 
-        // temporary: tracing gate teleports. remove me.
-        Logger.Debug("TRIGFIRE {0} | event={1} | zone={2} | bypass={3}",
-            Logger.Args(TriggerData.m_triggerName, message.EventName,
-                        Zone?.ZoneData?.m_zoneName, IsAlwaysOpenDoor(TriggerData, Zone)));
 
         // Evaluate requirements when present.
         if (   TriggerData.m_requirements is not null
