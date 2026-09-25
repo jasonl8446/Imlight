@@ -16,6 +16,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+using System;
 using System.Linq;
 using Akka.Actor;
 using Imcodec.MessageLayer.Generated;
@@ -57,6 +58,34 @@ internal class CommandQuest : CommandProtocol {
         ShowQuestInfoDialog(quest);
         SendQuestOfferDialog(quest);
         SendQuestOfferCacheOption(quest);
+    }
+
+    [Command("remove")]
+    [AuthRequired(AuthLevel.QualityAssurance)]
+    private void QuestRemoveCommand(string questName) {
+        var wizard = Context.Character;
+
+        var instance = wizard.QuestBehavior.CurrentQuestInstances
+            .FirstOrDefault(q => q.QuestName.Equals(questName, StringComparison.OrdinalIgnoreCase));
+        if (instance is null) {
+            InformSenderClient($"You do not have the quest '{questName}'.");
+
+            return;
+        }
+
+        var questId = instance.ID;
+        if (!wizard.RemoveQuest(instance.QuestName)) {
+            InformSenderClient($"Could not remove '{instance.QuestName}'.");
+
+            return;
+        }
+
+        // The client keeps its own copy of the quest log, so it has to be told too.
+        Context.SessionActor.Tell(new QUEST_MESSAGES_52_PROTOCOL.MSG_REMOVEQUEST {
+            QuestID = questId,
+        });
+
+        InformSenderClient($"Removed the quest '{instance.QuestName}'.");
     }
 
     private void ShowQuestInfoDialog(QuestTemplate quest) {
